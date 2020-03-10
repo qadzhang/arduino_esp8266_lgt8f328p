@@ -1,0 +1,6 @@
+ESP8266 就可以把GB2312的字库全部扔进去了。 16*16点阵的。
+
+这是我做的库，你可以参考一下。 还带了unicode 转GBK的转换表。
+https://github.com/fryefryefrye/Open-Source-RKS
+
+https://github.com/fryefryefrye/Open-Source-RKS/tree/master/RX/other/esp_led_unit_gb
