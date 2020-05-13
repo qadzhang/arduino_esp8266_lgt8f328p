@@ -4,7 +4,8 @@ void setup()
 
 {
 
-Wire.begin();
+Wire.begin();  Wire.setClock(100000L);
+ //Wire.setClockStretchLimit(1500L); 
 
 Serial.begin(9600);
 
