@@ -1,4 +1,4 @@
-// BMP180_I2C.ino
+﻿// BMP180_I2C.ino
 //
 // shows how to use the BMP180MI library with the sensor connected using I2C.
 //
@@ -12,11 +12,11 @@
 // SCL ----- SCL
 
 /*
- * BMP180MI
- * SimplePgSQL
- * 
- * 
- */
+   BMP180MI
+   SimplePgSQL
+
+
+*/
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -30,8 +30,9 @@ BMP180I2C bmp180(I2C_ADDRESS);
 
 float Temperature = 0;
 float Pressure = 0;
-String   Temperatures ;
-String  Pressures ;
+
+String Temperatures;
+String Pressures;
 
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -49,24 +50,27 @@ String  Pressures ;
 #endif
 #include <SimplePgSQL.h>
 
-IPAddress PGIP(192, 168, 1, 5); // your PostgreSQL server IP
+IPAddress PGIP(181, 268, 170, 229); // your PostgreSQL server IP
 
-const char ssid[] = "network_ssid"; //  your network SSID (name)
-const char pass[] = "network_pass"; // your network password
+const char ssid[] = "fgdg4"; //  your network SSID (name)
+const char pass[] = "xmfgdcom"; // your network password
 
-const char user[] = "db_username";     // your database user
-const char password[] = "db_password"; // your database password
-const char dbname[] = "db_name";       // your database name
-int port = 5432;                       // your database port
+const char user[] = "espf";                  // your database user
+const char password[] = "ewrewrwes"; // your database password
+const char dbname[] = "espe";                // your database name
+int port = 7876;                            // your database port
 
 int WiFiStatus;
 WiFiClient client;
-
+uint8_t MAC_array_STA[6];
+char MAC_char_STA[18];
+String MAC_array_STAs;
 char buffer[1024];
 PGconnection conn(&client, 0, 1024, buffer);
 
 void setup()
 {
+  ESP.wdtEnable(32000); //打开看门狗
   // put your setup code here, to run once:
   Serial.begin(9600);
 
@@ -91,6 +95,14 @@ void setup()
   bmp180.setSamplingMode(BMP180MI::MODE_UHR);
 
   WiFi.begin((char *)ssid, pass);
+
+  WiFi.macAddress(MAC_array_STA);
+  for (int i = 0; i < sizeof(MAC_array_STA); ++i)
+  {
+    sprintf(MAC_char_STA, "%s%02x", MAC_char_STA, MAC_array_STA[i]);
+  }
+
+  MAC_array_STAs = String(MAC_char_STA);
 }
 
 void checkConnection()
@@ -153,30 +165,42 @@ void bmp180_measure()
   } while (!bmp180.hasValue());
 
   Serial.print("Pressure: ");
-  Pressure = bmp180.getPressure();
+  Pressure = bmp180.getPressure() / 100.0;
   Serial.print(Pressure);
-  Serial.println(" Pa");
-
-  Temperatures = (Temperature, DEC);
-  Pressures = (Pressure, DEC);
-
-
+  Serial.println(" hPa");
+  Temperatures = convertFloatToString(Temperature);
+  Pressures = convertFloatToString(Pressure);
+  // ESP.wdtFeed();
 }
 
 int pg_status = 0;
 
+String convertFloatToString(float temperature)
+{ // begin function
 
+  char temp[10];
+  String tempAsString;
+
+  // perform conversion
+  dtostrf(temperature, 1, 2, temp);
+
+  // create string object
+  tempAsString = String(temp);
+
+  return tempAsString;
+
+} // end function
 
 void doPg()
 {
-  String query_sql = "insert  into esp_recodes values (now(),  inet_client_addr() ,upper('eerefcf'),'DHT','{ "" temperature "":    " +  Temperatures  + ", "" barometer "":" + Pressures   + "}')  ";
+  // ESP.wdtFeed();
+  String query_sql = "insert  into esp_recodes values (now(),  inet_client_addr() ,upper('" + MAC_array_STAs + "'),'BMP180','{ \"temperature\":    " + Temperatures + ", \"barometer\":" + Pressures + "}')  ";
 
   char query_tables[query_sql.length() + 1];
   query_sql.toCharArray(query_tables, query_sql.length() + 1);
   query_sql = "";
   Serial.println(query_tables);
-
-
+  // Serial.println(pg_status);
   char *msg;
   int rc;
   if (!pg_status)
@@ -187,11 +211,14 @@ void doPg()
                     dbname,
                     "utf8", port);
     pg_status = 1;
-    return;
+    // ESP.wdtFeed();
+    //   return;
+    // Serial.println(pg_status);
   }
 
   if (pg_status == 1)
   {
+    // ESP.wdtFeed();
     rc = conn.status();
     if (rc == CONNECTION_BAD || rc == CONNECTION_NEEDED)
     {
@@ -205,24 +232,33 @@ void doPg()
       pg_status = 2;
       Serial.println("Enter query");
     }
-    return;
+    // ESP.wdtFeed();
+    //   return;
+    // Serial.println(pg_status);
   }
   if (pg_status == 2)
   {
-
+    ESP.wdtFeed();
     if (conn.execute(query_tables, true))
       goto error;
     Serial.println("Working...");
+
     pg_status = 3;
-    return;
+    // pg_status =2;
+    ESP.wdtFeed();
+    //  return;
+    // Serial.println(pg_status);
   }
   if (pg_status == 3)
   {
+    ESP.wdtFeed();
+    delay(200);
     rc = conn.getData();
     int i;
     if (rc < 0)
       goto error;
     if (!rc)
+      // pg_status = 2;
       return;
     if (rc & PG_RSTAT_HAVE_COLUMNS)
     {
@@ -264,6 +300,10 @@ void doPg()
       Serial.println("Enter query");
     }
   }
+  //  pg_status = 0;
+  // conn.close();
+  // ESP.wdtFeed();
+  // Serial.println(pg_status);
   return;
 error:
   msg = conn.getMessage();
@@ -276,22 +316,54 @@ error:
     Serial.println("Connection is bad");
     pg_status = -1;
   }
+  pg_status = 0;
+  conn.close();
+  Serial.println("PG is bad bad");
+  delay(5 * 1000);
+  ESP.reset();
 }
 
+int is_wifi_con = 0;
+int pg_wait = 0;
+int pg_wait_time = 2*60;//等待的时间 ----  2分钟
 void loop()
 {
-
+  pg_wait = 0;
+  Serial.println("==========");
   checkConnection();
   if (WiFiStatus == WL_CONNECTED)
   {
-
-
     bmp180_measure();
+    ESP.wdtFeed();
     doPg();
+    ESP.wdtFeed();
+    doPg();
+    ESP.wdtFeed();
+  }
+  else
+  {
+    is_wifi_con++;
 
-    Serial.println("PG is bad bad");
-
+    delay(1 * 1000);
+    if (is_wifi_con > 10)
+    {
+      is_wifi_con = 0;
+      ESP.reset();
+    }
   }
 
-  delay(5 * 60);
+  if (pg_status == 0 or pg_status == 1)
+  {
+    delay(1000);
+    ESP.wdtFeed();
+  }
+  else
+  {
+    while (pg_wait < pg_wait_time)
+    {
+      ESP.wdtFeed();
+      pg_wait++;
+      delay(1000);
+    }
+  }
 }
